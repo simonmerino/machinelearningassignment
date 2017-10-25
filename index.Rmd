@@ -1,0 +1,249 @@
+---
+title: "index"
+author: "Simon Merino"
+date: "23 de octubre de 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prediction Assignment
+
+This coursera exercise is intended to category the execution of barbell lifts from the parameters captured by accelerometers on the belt, forearm, arm and dumbbell. The categories are 6, one for the correct execution and 5 extra more for incorrect ones. 
+
+Training data is available here:
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+While test data is available here:
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+```{r data_ingestion, echo=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "testing.csv")
+
+training<-read.table("training.csv",header=TRUE, sep=",")
+testing<-read.table("testing.csv",header=TRUE, sep=",")
+
+```
+
+
+
+The original training raw data has `r dim(training)[1]` samples with `r dim(training)[2]` variables each, while testing data has `r dim(testing)[1]`samples with `r dim(testing)[2]` variables each
+
+
+## Data Cleaning
+
+Not all `r dim(testing)[2]` dimensions contain relevant information, so the next step will be to eliminate not valuable features.
+
+### All NAs values
+In the training data, `r sum((colSums(is.na(training)))!=0)` variables have all records with NA values. These are directly deleted from both the training data.
+
+```{r removing NA}
+NAsTraining<-colSums(is.na(training))
+
+# Then remove 
+training<-training[,NAsTraining==0]
+testing<-testing[,NAsTraining==0]
+
+```
+
+
+
+### Empty and #DIV/0 values
+There are 9 features for which the only available values are either empty or #DIV/0. These features are also discarded.
+
+```{r removing #DIV/0!}
+training<-subset(training,select=-c(kurtosis_yaw_belt,skewness_yaw_belt,amplitude_yaw_belt,kurtosis_yaw_dumbbell,skewness_yaw_dumbbell,
+amplitude_yaw_dumbbell,
+kurtosis_yaw_forearm,
+skewness_yaw_forearm,
+amplitude_yaw_forearm))
+
+testing<-subset(testing,select=-c(kurtosis_yaw_belt,skewness_yaw_belt,amplitude_yaw_belt,kurtosis_yaw_dumbbell,skewness_yaw_dumbbell,
+amplitude_yaw_dumbbell,
+kurtosis_yaw_forearm,
+skewness_yaw_forearm,
+amplitude_yaw_forearm))
+
+```
+
+### Mostly Empty and some values
+There are 24 additional variables which are mainly empty. They have some non-zero values but they are not representative, so these are deleted also.
+
+
+```{r removing mostly empty}
+training<-subset(training,select=-c(kurtosis_roll_belt
+  ,kurtosis_picth_belt
+  ,skewness_roll_belt
+  ,skewness_roll_belt.1
+  ,max_yaw_belt
+  ,min_yaw_belt
+  ,kurtosis_roll_arm
+  ,kurtosis_picth_arm
+  ,kurtosis_yaw_arm
+  ,skewness_roll_arm
+  ,skewness_pitch_arm
+  ,skewness_yaw_arm
+  ,kurtosis_roll_dumbbell
+  ,kurtosis_picth_dumbbell
+  ,skewness_roll_dumbbell
+  ,skewness_pitch_dumbbell
+  ,max_yaw_dumbbell
+  ,min_yaw_dumbbell
+  ,kurtosis_roll_forearm
+  ,kurtosis_picth_forearm
+  ,skewness_roll_forearm
+  ,skewness_pitch_forearm
+  ,max_yaw_forearm
+  ,min_yaw_forearm))
+
+
+testing<-subset(testing,select=-c(kurtosis_roll_belt
+  ,kurtosis_picth_belt
+  ,skewness_roll_belt
+  ,skewness_roll_belt.1
+  ,max_yaw_belt
+  ,min_yaw_belt
+  ,kurtosis_roll_arm
+  ,kurtosis_picth_arm
+  ,kurtosis_yaw_arm
+  ,skewness_roll_arm
+  ,skewness_pitch_arm
+  ,skewness_yaw_arm
+  ,kurtosis_roll_dumbbell
+  ,kurtosis_picth_dumbbell
+  ,skewness_roll_dumbbell
+  ,skewness_pitch_dumbbell
+  ,max_yaw_dumbbell
+  ,min_yaw_dumbbell
+  ,kurtosis_roll_forearm
+  ,kurtosis_picth_forearm
+  ,skewness_roll_forearm
+  ,skewness_pitch_forearm
+  ,max_yaw_forearm
+  ,min_yaw_forearm))
+
+
+
+```
+
+
+### Non-info variables
+Finally all timestamp and regular ids are removed.
+
+```{r temporal and regular ids}
+training<-subset(training,select=-c(raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,X,new_window,num_window))
+
+
+testing<-subset(testing,select=-c(raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,X,new_window,num_window))
+
+```
+
+
+### Correcting outlier values
+
+Having a look at the distribution of values, for some records there are extreme values that seem like plain wrong. They are not so frequent so will not help in the categorization exercise. Therefore, these entries are corrected using 2 strategies: For variables in which the mean value is around zero, then they are corrected by 0 directly; for variables whose mean is clearly not around zero, then the mean value is entered.
+
+
+```{r correcting outliers}
+for (i in 1:nrow(training)) {
+  if(training$gyros_dumbbell_y[i]>50){training$gyros_dumbbell_y[i]=0}
+  if(training$gyros_dumbbell_x[i]<(-50)){training$gyros_dumbbell_x[i]=0}
+  if(training$gyros_dumbbell_z[i]>50){training$gyros_dumbbell_z[i]=0}
+  if(training$gyros_forearm_x[i]<(-10)){training$gyros_forearm_x[i]=0}
+  if(training$gyros_forearm_y[i]>50){training$gyros_forearm_y[i]=0}
+  if(training$gyros_forearm_z[i]>50){training$gyros_forearm_z[i]=0}
+  if(training$magnet_belt_x[i]>350){training$magnet_belt_x[i]=0}
+  if(training$magnet_belt_y[i]<300){training$magnet_belt_y[i]=mean(training$magnet_belt_y)}
+  if(training$magnet_belt_z[i]>0){training$magnet_belt_z[i]=mean(training$magnet_belt_z)}
+  
+  if(training$magnet_dumbbell_y[i]<(-1500)){training$magnet_dumbbell_y[i]=0}
+}
+
+
+
+```
+
+## Cross Validation
+
+In order to test model accuracy, training data is split between 2 parts, an 80% of the data is dedicated to model construction while the 20% remaining is used for model tuning.
+
+```{r library, include=FALSE}
+library(caret)
+```
+
+```{r cross validation}
+selectionvector<-createDataPartition(y=training$classe,p=0.80,list=FALSE)
+just_for_training<-training[selectionvector,]
+just_for_testing<-training[-selectionvector,]
+
+```
+
+
+## Model Construction
+
+As a first try, a *K-Nearest Neighbors* classification algorithm is exercised in the training data. 
+
+```{r knn, cache=TRUE}
+
+model_knn<-train(classe~.,method="knn", data=just_for_training)
+
+```
+
+
+The algorithm execution is smooth but doesn´t yield a good enough accuracy. Therefore, it is discarded.
+
+```{r knn prediction and accuracy, cache=TRUE}
+confusionMatrix(just_for_testing$classe,predict(model_knn,newdata=just_for_testing))
+
+```
+
+
+Finally, a *Random Forest* algorithm is exercised.
+
+```{r randomForest, cache=TRUE}
+model_randomForest<-train(classe~.,method="rf", data=just_for_training)
+confusionMatrix(just_for_testing$classe,predict(model_randomForest,newdata=just_for_testing))
+
+
+```
+This model yields an accuracy of over 0.99 on the testing data. therefore it looks like a good try for tackling the real testing data.
+
+### Variable Importance
+Also, an evaluation of the model shows that the most important variables that add value to the model are the following ones
+
+```{r variables, cache=TRUE}
+varImp(model_randomForest)
+
+```
+With the intention of lowering the runtime of the model construction, a couple of new models are constructed with the top 9 and 12 variables in importance. 
+
+```{r topN models, cache=TRUE}
+# TOP 9
+model_randomForest_9<-train(classe~roll_belt+pitch_forearm+yaw_belt+magnet_dumbbell_y+magnet_dumbbell_z+pitch_belt+roll_forearm+accel_dumbbell_y+roll_dumbbell,method="rf", data=just_for_training)
+top9_matrix<-confusionMatrix(just_for_testing$classe,predict(model_randomForest_9,newdata=just_for_testing))
+
+#TOP 12
+model_randomForest_12<-train(classe~roll_belt+pitch_forearm+yaw_belt+magnet_dumbbell_y+magnet_dumbbell_z+pitch_belt+roll_forearm+accel_dumbbell_y+roll_dumbbell+accel_forearm_x+magnet_dumbbell_x+accel_belt_z ,method="rf", data=just_for_training)
+top12_matrix<-confusionMatrix(just_for_testing$classe,predict(model_randomForest_12,newdata=just_for_testing))
+
+
+```
+Corresponding Accuracies for these models are 
+
+```{r accuracies, cache=TRUE}
+top9_matrix$overall[1]
+top12_matrix$overall[1]
+
+```
+Therefore, the 12 variable Random Forest Model is the one actually picked as a proposed solution to this exercise
+
+##Testing Data Estimation
+
+This is the actual outcome which is submitted to the course assignment.
+```{r testing data}
+predict(model_randomForest_12,newdata=testing)
+
+```
