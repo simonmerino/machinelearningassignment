@@ -2,7 +2,7 @@
 title: "index"
 author: "Simon Merino"
 date: "23 de octubre de 2017"
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -209,7 +209,7 @@ confusionMatrix(just_for_testing$classe,predict(model_randomForest,newdata=just_
 
 
 ```
-This model yields an accuracy of over 0.99 on the testing data. therefore it looks like a good try for tackling the real testing data.
+This model yields an accuracy of over 0.99 on the testing data, so it yields a good enough *out of sample data*. therefore it looks like a good try for tackling the real testing data.
 
 ### Variable Importance
 Also, an evaluation of the model shows that the most important variables that add value to the model are the following ones
@@ -231,7 +231,7 @@ top12_matrix<-confusionMatrix(just_for_testing$classe,predict(model_randomForest
 
 
 ```
-Corresponding Accuracies for these models are 
+Corresponding Accuracies for these models are (out of sample error) 
 
 ```{r accuracies, cache=TRUE}
 top9_matrix$overall[1]
